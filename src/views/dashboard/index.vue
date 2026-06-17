@@ -153,8 +153,10 @@ onUnmounted(() => fab.clear());
 
     <template v-else-if="stats">
       <!-- ════════ Hero：健康分 + 概要 ════════ -->
+      <!-- shrink-0：本卡 overflow-hidden 会让 flex 子项 min-height 归零，父列高度不足时
+           会被压扁裁切（健康环上下被切、徽标/指标行消失）。禁止收缩，改由父列滚动。 -->
       <section
-        class="relative flex items-center gap-34px p-[26px_32px] rounded-lg border border-hairline bg-elevated overflow-hidden"
+        class="relative shrink-0 flex items-center gap-34px p-[26px_32px] rounded-lg border border-hairline bg-elevated overflow-hidden"
       >
         <div
           class="absolute inset-0 pointer-events-none bg-[radial-gradient(90%_120%_at_100%_0%,rgba(56,224,138,0.08),transparent_55%)]"
