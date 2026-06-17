@@ -52,6 +52,12 @@ export const groups: MenuGroup[] = [
         icon: "i-ph-plugs-duotone",
         path: "/tools/kill-port",
       },
+      {
+        key: "web-tools",
+        label: "网页工具",
+        icon: "i-ph-browser-duotone",
+        path: "/tools/web",
+      },
     ],
   },
 ];

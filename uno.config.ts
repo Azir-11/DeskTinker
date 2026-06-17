@@ -30,6 +30,7 @@ export default defineConfig({
     "i-ph-arrow-up-right-bold",
     "i-ph-bell-bold",
     "i-ph-broom-bold",
+    "i-ph-browser-duotone",
     "i-ph-desktop-duotone",
     "i-ph-timer-duotone",
     "i-ph-check-bold",
