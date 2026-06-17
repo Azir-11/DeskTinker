@@ -5,10 +5,14 @@ import SideBar from "./components/SideBar.vue";
 import WindowControls from "./components/WindowControls.vue";
 import { useFabStore } from "@/store/fab";
 import { isWindows } from "@/composables/usePlatform";
+import { useClickThrough } from "@/composables/useClickThrough";
 import { allItems } from "./menu";
 
 const route = useRoute();
 const fab = useFabStore();
+
+// 透明边距（左 / 下）点击穿透到下层窗口；实体区域以 data-ct-solid 标记。
+useClickThrough();
 
 const current = computed(() => allItems.find((m) => m.path === route.path));
 </script>
@@ -17,6 +21,7 @@ const current = computed(() => allItems.find((m) => m.path === route.path));
   <div class="fixed inset-0 bg-transparent">
     <!-- ════════ Base window (back layer, no drop shadow) ════════ -->
     <div
+      data-ct-solid
       class="absolute top-[var(--base-top)] right-[var(--base-right)] bottom-[var(--base-bottom)] left-[var(--base-left)] rounded-window overflow-hidden border border-hairline bg-base"
     >
       <WindowControls
@@ -63,6 +68,7 @@ const current = computed(() => allItems.find((m) => m.path === route.path));
 
     <!-- ════════ Floating menu panel (overhangs left, ~80% of base height) ════════ -->
     <aside
+      data-ct-solid
       class="absolute left-[var(--panel-left)] top-[var(--panel-top)] w-[var(--panel-w)] h-[var(--panel-h)] z-5 flex flex-col pt-14px px-12px pb-12px rounded-[18px] border border-[var(--c-panel-border)] bg-panel shadow-panel overflow-hidden"
     >
       <div class="flex items-center gap-9px px-4px pb-14px" data-tauri-drag-region>
@@ -96,6 +102,7 @@ const current = computed(() => allItems.find((m) => m.path === route.path));
     >
       <button
         v-if="fab.action"
+        data-ct-solid
         class="absolute bottom-[16px] left-[var(--fab-center-x)] -translate-x-1/2 z-10 inline-flex items-center justify-center min-w-[140px] h-46px px-22px rounded-full border-none cursor-pointer text-[#04130b] font-600 text-14px bg-grad-accent shadow-fab transition-transform duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:-translate-y-2px active:scale-95"
         @click="fab.trigger()"
       >

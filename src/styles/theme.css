@@ -22,11 +22,15 @@
   --font-mono:
     "JetBrains Mono Variable", ui-monospace, "SF Mono", "Cascadia Code", Consolas, Menlo, monospace;
 
-  /* Layered window geometry. The base window is inset on all sides;
-     the menu panel overhangs the left edge and floats at ~80% of the
-     base height, vertically centred. */
-  --base-top: 30px;
-  --base-right: 30px;
+  /* Layered window geometry. Transparent margins exist only on the LEFT and
+     BOTTOM — that is where the irregular "floating" look lives (the menu panel
+     overhangs the left edge; the FAB floats below the base). The base window is
+     flush to the TOP and RIGHT (no margin) so notifications/toasts land on the
+     opaque surface instead of detached in the transparent void, and so there is
+     no needless click-through region up there. The left/bottom transparent
+     margins are made click-through to windows below (see useClickThrough). */
+  --base-top: 0px;
+  --base-right: 0px;
   --base-bottom: 40px;
   --base-left: 60px;
   --panel-left: 30px;
