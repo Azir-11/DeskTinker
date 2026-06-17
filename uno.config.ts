@@ -49,6 +49,7 @@ export default defineConfig({
     "i-ph-memory-duotone",
     "i-ph-minus-bold",
     "i-ph-moon-stars-duotone",
+    "i-ph-plugs-duotone",
     "i-ph-plus-bold",
     "i-ph-radar-duotone",
     "i-ph-shield-check-duotone",
@@ -164,6 +165,11 @@ export default defineConfig({
         }
         ::-webkit-scrollbar-thumb:hover { background: var(--c-text-3); background-clip: padding-box; }
         ::-webkit-scrollbar-track { background: transparent; }
+
+        /* 异形透明窗口：Naive 弹窗遮罩默认是整屏 rgba(0,0,0,.4)，会把左/下透明边距
+           （本应透出桌面）糊成黑色。本应用弹窗统一 teleport 进 #overlay-host，这里
+           将遮罩置透明——靠浮层卡片自身的阴影做层次，避免黑蒙版盖住穿透区。 */
+        #overlay-host .n-modal-mask { background-color: transparent; }
       `,
     },
   ],

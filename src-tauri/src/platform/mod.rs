@@ -1,3 +1,16 @@
+/// 占用某端口的一个进程（前端据此渲染确认弹窗，无需知道平台细节）。
+#[derive(serde::Serialize)]
+pub struct PortProcess {
+    /// 进程 ID。
+    pub pid: u32,
+    /// 进程名（如 "node.exe" / "node"）。
+    pub name: String,
+    /// 协议（"TCP" / "UDP"）。
+    pub proto: String,
+    /// 本地监听地址（如 "0.0.0.0:1420" / "[::]:1420" / "*:1420"）。
+    pub local_addr: String,
+}
+
 /// 一个 shell 启动配置文件的描述（前端据此渲染，无需知道平台细节）。
 #[derive(serde::Serialize)]
 pub struct ShellConfig {
@@ -24,8 +37,8 @@ use self::windows as sys;
 
 // 直接由命令调用的“平台专属”入口，原样再导出。
 pub use sys::{
-    dns_flush_granted, flush_dns, grant_dns_flush_access, grant_hosts_access, hosts_writable,
-    shell_configs,
+    check_port, dns_flush_granted, flush_dns, grant_dns_flush_access, grant_hosts_access,
+    hosts_writable, kill_pid, shell_configs,
 };
 
 /// 当前平台的 hosts 路径（字符串，供前端文案）。

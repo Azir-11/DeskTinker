@@ -25,6 +25,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import("@/views/system/index.vue"),
   },
   {
+    path: "/tools/kill-port",
+    name: "kill-port",
+    component: () => import("@/views/tools/kill-port/index.vue"),
+  },
+  {
     path: "/settings",
     name: "settings",
     component: () => import("@/views/settings/index.vue"),

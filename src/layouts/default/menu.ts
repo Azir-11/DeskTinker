@@ -43,6 +43,17 @@ export const groups: MenuGroup[] = [
       },
     ],
   },
+  {
+    title: "其他工具",
+    items: [
+      {
+        key: "kill-port",
+        label: "终端工具",
+        icon: "i-ph-plugs-duotone",
+        path: "/tools/kill-port",
+      },
+    ],
+  },
 ];
 
 /** Pinned to the bottom of the panel. */

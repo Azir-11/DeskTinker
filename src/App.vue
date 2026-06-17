@@ -15,9 +15,12 @@ watchEffect(() => {
 <template>
   <NConfigProvider :theme="appStore.isDark ? darkTheme : null">
     <NMessageProvider>
-      <NDialogProvider>
+      <!-- 弹窗 teleport 进实体宿主：异形窗口靠 data-ct-solid 区分「可交互/可穿透」，
+           而 Naive 弹窗默认挂到 <body>（无标记）会被点击穿透吞掉，无法点确认/取消。 -->
+      <NDialogProvider to="#overlay-host">
         <DefaultLayout />
       </NDialogProvider>
     </NMessageProvider>
   </NConfigProvider>
+  <div id="overlay-host" data-ct-solid />
 </template>

@@ -1,7 +1,8 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::platform::ShellConfig;
+use crate::platform::{PortProcess, ShellConfig};
 
 fn home() -> PathBuf {
     PathBuf::from(std::env::var("USERPROFILE").unwrap_or_default())
@@ -83,6 +84,116 @@ pub async fn flush_dns() -> Result<(), String> {
         let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
         Err(if err.is_empty() { "刷新失败".into() } else { err })
     }
+}
+
+// ───── Port ─────（netstat 查占用 + taskkill 结束，均无需提权）
+/// 解析 `tasklist` 取进程名（CSV 无表头）。未命中时 tasklist 打印
+/// 「信息: 没有运行的任务…」而非 CSV 行，故只认以引号开头的行。
+fn process_name(pid: u32) -> Option<String> {
+    let out = Command::new("tasklist")
+        .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
+        .output()
+        .ok()?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let first = text.lines().next()?.trim();
+    // CSV 行形如 "node.exe","12345","Console","1","45,678 K"
+    let name = first.strip_prefix('"')?.split('"').next()?;
+    if name.is_empty() {
+        None
+    } else {
+        Some(name.to_string())
+    }
+}
+
+/// 查端口占用：`netstat -ano` 列出全部连接，挑出本地端口匹配且（TCP 仅取
+/// LISTENING、UDP 全取）的行，按 PID 去重后用 tasklist 补进程名。无需提权。
+pub async fn check_port(port: u16) -> Result<Vec<PortProcess>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let out = Command::new("netstat")
+            .args(["-ano"])
+            .output()
+            .map_err(|e| format!("netstat 执行失败：{e}"))?;
+        if !out.status.success() {
+            return Err("netstat 执行失败".into());
+        }
+        let text = String::from_utf8_lossy(&out.stdout);
+        let port_str = port.to_string();
+        let mut seen: HashSet<u32> = HashSet::new();
+        let mut result = Vec::new();
+        for line in text.lines() {
+            let cols: Vec<&str> = line.split_whitespace().collect();
+            if cols.len() < 4 {
+                continue;
+            }
+            let proto = cols[0].to_uppercase();
+            // TCP: 协议 本地 外部 状态 PID（5 列）；UDP: 协议 本地 外部 PID（4 列）。
+            let (local, pid_str, occupies) = match proto.as_str() {
+                "TCP" => {
+                    if cols.len() < 5 {
+                        continue;
+                    }
+                    (cols[1], cols[4], cols[3].eq_ignore_ascii_case("LISTENING"))
+                }
+                "UDP" => (cols[1], cols[3], true),
+                _ => continue,
+            };
+            if !occupies {
+                continue;
+            }
+            // 末段端口须精确相等，避免 :1420 误配 :14200。
+            if local.rsplit(':').next() != Some(port_str.as_str()) {
+                continue;
+            }
+            let Ok(pid) = pid_str.parse::<u32>() else {
+                continue;
+            };
+            if pid == 0 || !seen.insert(pid) {
+                continue;
+            }
+            let name = process_name(pid).unwrap_or_else(|| "未知进程".into());
+            result.push(PortProcess {
+                pid,
+                name,
+                proto,
+                local_addr: local.to_string(),
+            });
+        }
+        Ok(result)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// 结束进程：taskkill /F /PID。仅能结束当前用户有权限的进程（如自己的开发
+/// 服务器）；结束他人/系统进程会因权限不足失败，错误原样透传给前端。
+pub async fn kill_pid(pid: u32) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let out = Command::new("taskkill")
+            .args(["/F", "/PID", &pid.to_string()])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if out.status.success() {
+            return Ok(());
+        }
+        // 进程已不存在（taskkill 退出码 128）：对「释放端口」而言目标已达成，视作成功。
+        // 覆盖「确认期间进程自行退出 / 被作为子进程连带回收」的竞态，避免误报失败。
+        // 退出码与语言无关，比匹配本地化的「找不到进程」文案更稳。
+        if out.status.code() == Some(128) {
+            return Ok(());
+        }
+        // 其余失败（如拒绝访问，退出码 1）：taskkill 把错误写到 stderr；个别本地化版本写 stdout。
+        let mut err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        if err.is_empty() {
+            err = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        }
+        Err(if err.is_empty() {
+            "结束进程失败".into()
+        } else {
+            err
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 // ───── Shell ─────（PowerShell $PROFILE + cmd AutoRun）

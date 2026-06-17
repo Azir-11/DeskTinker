@@ -46,6 +46,17 @@ fn write_shell_config(name: String, content: String) -> Result<(), String> {
     platform::write_shell_config(name, content)
 }
 
+// ───────────────────────── Port (杀端口工具) ─────────────────────────
+#[tauri::command]
+async fn check_port(port: u16) -> Result<Vec<platform::PortProcess>, String> {
+    platform::check_port(port).await
+}
+
+#[tauri::command]
+async fn kill_process(pid: u32) -> Result<(), String> {
+    platform::kill_pid(pid).await
+}
+
 // ───────────────────────── DNS cache flush ─────────────────────────
 #[tauri::command]
 async fn dns_flush_granted() -> bool {
@@ -229,6 +240,8 @@ pub fn run() {
             read_hosts,
             grant_hosts_access,
             write_hosts,
+            check_port,
+            kill_process,
             list_shell_configs,
             read_shell_config,
             write_shell_config,

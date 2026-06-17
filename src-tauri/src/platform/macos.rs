@@ -1,7 +1,8 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::platform::ShellConfig;
+use crate::platform::{PortProcess, ShellConfig};
 
 const HOSTS_PATH: &str = "/etc/hosts";
 const SHELL_FILES: [&str; 4] = ["zshrc", "zprofile", "zshenv", "zlogin"];
@@ -131,6 +132,100 @@ pub async fn flush_dns() -> Result<(), String> {
         run(&[DSCACHEUTIL, "-flushcache"])?;
         run(&[KILLALL, "-HUP", "mDNSResponder"])?;
         Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ───── Port ─────（lsof 查占用 + kill 结束，均无需提权）
+/// 查端口占用：分别问 TCP（仅 LISTEN）与 UDP，用 lsof 的字段模式 `-Fpcn`
+/// （p=PID / c=命令 / n=地址）便于稳定解析；按 (pid,proto) 去重。lsof 在无匹配
+/// 时以非 0 退出，这不算错误（视为端口空闲）；只有进程拉起失败才报错——否则会把
+/// 「检测不到」误报成「端口空闲」。
+pub async fn check_port(port: u16) -> Result<Vec<PortProcess>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut seen: HashSet<(u32, &'static str)> = HashSet::new();
+        let mut result = Vec::new();
+        let queries: [(&'static str, Vec<String>); 2] = [
+            (
+                "TCP",
+                vec![
+                    "-nP".into(),
+                    format!("-iTCP:{port}"),
+                    "-sTCP:LISTEN".into(),
+                    "-Fpcn".into(),
+                ],
+            ),
+            ("UDP", vec!["-nP".into(), format!("-iUDP:{port}"), "-Fpcn".into()]),
+        ];
+        for (proto, args) in queries {
+            let out = Command::new("lsof")
+                .args(&args)
+                .output()
+                .map_err(|e| format!("lsof 执行失败：{e}"))?;
+            // lsof 无匹配时以非 0 退出且 stdout/stderr 皆空 → 视为端口空闲；但若 stderr
+            // 非空说明 lsof 真出错了，须报错，否则会把「检测失败」误报成「端口空闲」。
+            if !out.status.success() {
+                let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                if !err.is_empty() {
+                    return Err(format!("lsof 执行失败：{err}"));
+                }
+            }
+            let text = String::from_utf8_lossy(&out.stdout);
+            // lsof -F 按进程分组：先 p<pid>/c<command>，再每个文件一行 n<addr>。
+            let mut pid: Option<u32> = None;
+            let mut cmd = String::new();
+            for line in text.lines() {
+                if line.is_empty() {
+                    continue;
+                }
+                let (tag, val) = line.split_at(1);
+                match tag {
+                    "p" => {
+                        pid = val.parse().ok();
+                        cmd.clear();
+                    }
+                    "c" => cmd = val.to_string(),
+                    "n" => {
+                        if let Some(p) = pid {
+                            if seen.insert((p, proto)) {
+                                result.push(PortProcess {
+                                    pid: p,
+                                    name: cmd.clone(),
+                                    proto: proto.to_string(),
+                                    local_addr: val.to_string(),
+                                });
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Ok(result)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// 结束进程：kill -9。仅能结束当前用户有权限的进程（如自己的开发服务器）；
+/// 结束他人/root 进程会因权限不足失败，错误原样透传给前端。
+pub async fn kill_pid(pid: u32) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let out = Command::new("kill")
+            .args(["-9", &pid.to_string()])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if out.status.success() {
+            Ok(())
+        } else {
+            let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            Err(if err.is_empty() {
+                "结束进程失败".into()
+            } else {
+                err
+            })
+        }
     })
     .await
     .map_err(|e| e.to_string())?
