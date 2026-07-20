@@ -58,6 +58,12 @@ export const groups: MenuGroup[] = [
         icon: "i-ph-browser-duotone",
         path: "/tools/web",
       },
+      {
+        key: "web-preview",
+        label: "网页预览",
+        icon: "i-ph-monitor-duotone",
+        path: "/tools/web-preview",
+      },
     ],
   },
 ];
