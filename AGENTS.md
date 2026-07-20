@@ -25,7 +25,7 @@ pnpm format:check       # oxfmt --check . (what CI runs)
 pnpm tauri build        # full package: compiles Rust + produces installers (dmg / nsis)
 ```
 
-There is **no test suite**. CI (`.github/workflows/ci.yml`) runs on macOS + Windows and gates on: `pnpm build`, `pnpm lint`, `pnpm format:check`, then a full `pnpm tauri build`. Match those locally before pushing.
+There is no frontend test suite; focused Rust unit tests live beside the code they cover and run with `cargo test`. CI (`.github/workflows/ci.yml`) runs on macOS + Windows and gates on: `pnpm build`, `pnpm lint`, `pnpm format:check`, then a full `pnpm tauri build`. Match those locally before pushing.
 
 ## Architecture
 
@@ -57,6 +57,8 @@ A single `sysinfo::System` lives in Tauri managed state (`Mutex<System>`) so CPU
 - **Styling is UnoCSS-only — no `<style>` blocks.** All design tokens are CSS variables in `src/styles/theme.css` (dark default + `[data-theme="light"]`), surfaced to UnoCSS as theme colors/shortcuts/rules in `uno.config.ts`. Theme switches by setting `document.documentElement.dataset.theme` (App.vue), which also drives Naive UI's `darkTheme`.
 - **Icons**: Phosphor (`i-ph-*`) / Carbon via `presetIcons`. Icons referenced only in `.ts` data files (e.g. `menu.ts`) aren't scanned by UnoCSS's pipeline — they must be added to the `safelist` in `uno.config.ts` or they won't render.
 - **Frameless layered window**: `decorations:false` + `transparent:true` (tauri.conf.json). The layout (`layouts/default/index.vue`) hand-builds the window: an inset base window + an overhanging floating menu panel, geometry driven by `--base-*` / `--panel-*` / `--content-ml` / `--fab-center-x` CSS vars. Custom window controls (`WindowControls.vue`) render macOS traffic-lights vs Windows square buttons, branched on `isWindows`/`isMacOS` from `composables/usePlatform.ts` (UA sniffing — cheap, sync, for chrome appearance only). `data-tauri-drag-region` marks draggable areas.
+- **Teleported overlays must stay solid**: `useClickThrough.ts` treats anything outside a `[data-ct-solid]` ancestor as transparent and switches the whole Tauri window to ignore cursor events. Every popup/follower rendered outside its trigger must therefore mount under `#overlay-host` (which is marked `data-ct-solid`). Provider-level overlays use their provider's `to="#overlay-host"`; standalone components such as `NDatePicker` must set `to="#overlay-host"` directly. Never leave a Naive UI popup teleported to `<body>`—it will look correct but clicks will pass through to the application underneath.
+- **Naive UI locale is global**: `App.vue` configures both `zhCN` and `dateZhCN` on `NConfigProvider`. Keep both values when changing the provider; `locale` translates component actions while `date-locale` translates calendar months and weekdays.
 - **Context-aware FAB**: the floating action button is global, driven by `store/fab.ts`. Each page registers its primary action on `onMounted` (`fab.set({ label, icon, run })`) and `fab.clear()`s on `onUnmounted`. `run` returning `false` = silent abort (idle); throwing = error state. The store runs an idle→loading→success/error→idle machine with deliberate minimum timings.
 - **Page action pattern** (see `views/hosts/index.vue`, `views/shell/index.vue`): load state via `invoke`, mutate locally, persist via the FAB's `run`. After a successful write, do **not** re-`invoke` a read — the in-memory list already reflects what was written, and re-parsing rebuilds rows and flickers the UI.
 

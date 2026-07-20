@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::platform::{PortProcess, ShellConfig};
+use crate::platform::{enrich_port_processes, PortProcess, ShellConfig};
 
 fn home() -> PathBuf {
     PathBuf::from(std::env::var("USERPROFILE").unwrap_or_default())
@@ -156,8 +156,13 @@ pub async fn check_port(port: u16) -> Result<Vec<PortProcess>, String> {
                 name,
                 proto,
                 local_addr: local.to_string(),
+                executable_path: None,
+                command_line: None,
+                cwd: None,
+                parent_pid: None,
             });
         }
+        enrich_port_processes(&mut result);
         Ok(result)
     })
     .await

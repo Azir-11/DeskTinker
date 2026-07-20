@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::platform::{PortProcess, ShellConfig};
+use crate::platform::{enrich_port_processes, PortProcess, ShellConfig};
 
 const HOSTS_PATH: &str = "/etc/hosts";
 const SHELL_FILES: [&str; 4] = ["zshrc", "zprofile", "zshenv", "zlogin"];
@@ -194,6 +194,10 @@ pub async fn check_port(port: u16) -> Result<Vec<PortProcess>, String> {
                                     name: cmd.clone(),
                                     proto: proto.to_string(),
                                     local_addr: val.to_string(),
+                                    executable_path: None,
+                                    command_line: None,
+                                    cwd: None,
+                                    parent_pid: None,
                                 });
                             }
                         }
@@ -202,6 +206,7 @@ pub async fn check_port(port: u16) -> Result<Vec<PortProcess>, String> {
                 }
             }
         }
+        enrich_port_processes(&mut result);
         Ok(result)
     })
     .await

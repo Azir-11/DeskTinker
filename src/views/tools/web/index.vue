@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useMessage } from "naive-ui";
 import dayjs from "dayjs";
+import { arabicToChineseMoney, chineseMoneyToArabic } from "@/utils/chineseMoney";
 
 const message = useMessage();
 
@@ -58,10 +59,34 @@ async function copy(text: string) {
 function fillNowToInput() {
   tsInput.value = tsUnit.value === "s" ? nowS.value : nowMs.value;
 }
+
+// ── 阿拉伯金额 ↔ 人民币大写金额 ──
+const numeralDirection = ref<"toChinese" | "toArabic">("toChinese");
+const numeralInput = ref("");
+const numeralResult = computed<{ ok: boolean; text: string } | null>(() => {
+  const raw = numeralInput.value.trim();
+  if (!raw) return null;
+  try {
+    return {
+      ok: true,
+      text:
+        numeralDirection.value === "toChinese"
+          ? arabicToChineseMoney(raw)
+          : chineseMoneyToArabic(raw),
+    };
+  } catch (error) {
+    return { ok: false, text: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+function switchNumeralDirection() {
+  if (numeralResult.value?.ok) numeralInput.value = numeralResult.value.text;
+  numeralDirection.value = numeralDirection.value === "toChinese" ? "toArabic" : "toChinese";
+}
 </script>
 
 <template>
-  <div class="h-full overflow-auto pr-2px">
+  <div class="h-full overflow-auto pr-2px flex flex-col gap-14px">
     <section class="card p-18px flex flex-col gap-16px w-full max-w-[520px]">
       <div class="flex items-center gap-10px">
         <span class="i-ph-clock-duotone text-20px text-accent-2 shrink-0" />
@@ -111,7 +136,13 @@ function fillNowToInput() {
       <div class="flex flex-col gap-9px">
         <span class="text-12px text-fg-3">时间 → 时间戳</span>
         <div class="flex items-center gap-10px flex-wrap">
-          <NDatePicker v-model:value="dateValue" type="datetime" clearable class="w-240px" />
+          <NDatePicker
+            v-model:value="dateValue"
+            type="datetime"
+            clearable
+            to="#overlay-host"
+            class="w-240px"
+          />
         </div>
         <div v-if="tsFromDate" class="flex items-center gap-8px flex-wrap">
           <button :class="chip" title="复制毫秒" @click="copy(tsFromDate.ms)">
@@ -121,6 +152,53 @@ function fillNowToInput() {
             秒 {{ tsFromDate.s }} <span class="i-ph-copy-bold" />
           </button>
         </div>
+      </div>
+    </section>
+
+    <section class="card p-18px flex flex-col gap-14px w-full max-w-[520px]">
+      <div class="flex items-center gap-10px">
+        <span class="i-ph-currency-cny-duotone text-20px text-info shrink-0" />
+        <span class="text-14px font-600">人民币大写金额</span>
+      </div>
+
+      <div class="flex items-center gap-8px flex-wrap">
+        <NRadioGroup v-model:value="numeralDirection" size="small">
+          <NRadioButton value="toChinese">金额 → 中文大写</NRadioButton>
+          <NRadioButton value="toArabic">中文大写 → 金额</NRadioButton>
+        </NRadioGroup>
+        <NButton quaternary circle title="交换输入与结果" @click="switchNumeralDirection">
+          <template #icon><span class="i-ph-swap-bold" /></template>
+        </NButton>
+      </div>
+
+      <NInput
+        v-model:value="numeralInput"
+        clearable
+        :placeholder="
+          numeralDirection === 'toChinese'
+            ? '例如：123456.78'
+            : '例如：壹拾贰万叁仟肆佰伍拾陆元柒角捌分'
+        "
+      />
+
+      <div v-if="numeralResult" class="flex items-start gap-8px min-h-28px">
+        <span class="i-ph-arrow-right-bold text-13px text-fg-3 mt-4px shrink-0" />
+        <code
+          v-if="numeralResult.ok"
+          class="font-mono text-15px text-accent-2 leading-[1.65] break-all select-text"
+        >
+          {{ numeralResult.text }}
+        </code>
+        <span v-else class="text-13px text-amber leading-[1.65]">{{ numeralResult.text }}</span>
+        <button
+          v-if="numeralResult.ok"
+          :class="chip"
+          class="ml-auto shrink-0"
+          title="复制结果"
+          @click="copy(numeralResult.text)"
+        >
+          <span class="i-ph-copy-bold" />
+        </button>
       </div>
     </section>
   </div>
