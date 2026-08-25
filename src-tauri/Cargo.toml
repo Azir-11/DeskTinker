@@ -30,3 +30,8 @@ serde_json = "1"
 # 并按 PID 查询端口占用进程详情）、disk（磁盘占用）、component（温度，尽力而为，
 # Windows 走 WMI 可能为空）。无 network。
 sysinfo = { version = "0.33", default-features = false, features = ["system", "disk", "component"] }
+# SSL 证书申请（ACME）：certon 负责 Let's Encrypt 订单/授权/签发，ring 后端避免
+# aws-lc 的 CMake 构建依赖；hickory-resolver 用于手动 DNS-01 的多解析器测试。
+certon = { version = "0.2", default-features = false, features = ["ring"] }
+hickory-resolver = "0.26"
+tokio = { version = "1", features = ["rt"] }

@@ -64,6 +64,12 @@ export const groups: MenuGroup[] = [
         icon: "i-ph-monitor-duotone",
         path: "/tools/web-preview",
       },
+      {
+        key: "ssl",
+        label: "SSL 申请",
+        icon: "i-ph-certificate-duotone",
+        path: "/ssl",
+      },
     ],
   },
 ];

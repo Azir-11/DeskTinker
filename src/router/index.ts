@@ -40,6 +40,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import("@/views/tools/web-preview/index.vue"),
   },
   {
+    path: "/ssl",
+    name: "ssl",
+    component: () => import("@/views/ssl/index.vue"),
+  },
+  {
     path: "/settings",
     name: "settings",
     component: () => import("@/views/settings/index.vue"),

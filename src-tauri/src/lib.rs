@@ -1,4 +1,7 @@
 mod platform;
+mod acme;
+
+use crate::acme::{acme_check_dns, acme_finalize_order, acme_list_certificates, acme_start_order};
 
 use std::sync::Mutex;
 
@@ -234,6 +237,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(Mutex::new(init_system()))
+        .manage(acme::AcmeState::default())
         .invoke_handler(tauri::generate_handler![
             hosts_writable,
             hosts_path,
@@ -251,7 +255,11 @@ pub fn run() {
             read_system_stats,
             read_host_info,
             read_disks,
-            read_cpu_temp
+            read_cpu_temp,
+            acme_start_order,
+            acme_check_dns,
+            acme_finalize_order,
+            acme_list_certificates
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

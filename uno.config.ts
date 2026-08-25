@@ -32,6 +32,7 @@ export default defineConfig({
     "i-ph-arrow-arc-left-duotone",
     "i-ph-broom-bold",
     "i-ph-browser-duotone",
+    "i-ph-certificate-duotone",
     "i-ph-desktop-duotone",
     "i-ph-eye-duotone",
     "i-ph-monitor-duotone",
