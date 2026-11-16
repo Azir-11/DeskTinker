@@ -232,6 +232,27 @@ pub(crate) fn read_cpu_history(
 }
 
 #[tauri::command]
+pub(crate) async fn read_cpu_history_range(
+    app: AppHandle,
+    start: u64,
+    end: u64,
+) -> Result<Vec<CpuHistoryPoint>, String> {
+    if start >= end {
+        return Err("结束时间必须晚于开始时间".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<Telemetry>();
+        let guard = state.history_store.lock().map_err(|e| e.to_string())?;
+        let store = guard.as_ref().ok_or("CPU 历史存储不可用")?;
+        store
+            .range_points(start, end, unix_time_ms())
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 pub(crate) fn read_cpu_history_retention(
     state: tauri::State<'_, Telemetry>,
 ) -> Result<u32, String> {

@@ -104,6 +104,7 @@ pub fn run() {
             flush_dns_cache,
             telemetry::read_system_stats,
             telemetry::read_cpu_history,
+            telemetry::read_cpu_history_range,
             telemetry::read_cpu_history_retention,
             telemetry::set_cpu_history_retention,
             telemetry::read_process_stats,

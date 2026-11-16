@@ -2,7 +2,7 @@ use std::{collections::VecDeque, time::Duration};
 
 pub(super) const LIVE_INTERVAL: Duration = Duration::from_secs(2);
 pub(super) const CHART_DURATION: Duration = Duration::from_secs(6 * 60 * 60);
-const MAX_SAMPLE_GAP: Duration = Duration::from_secs(6);
+pub(super) const MAX_SAMPLE_GAP: Duration = Duration::from_secs(6);
 pub(super) const MAX_POINTS: usize =
     (CHART_DURATION.as_secs() / LIVE_INTERVAL.as_secs()) as usize + 1;
 

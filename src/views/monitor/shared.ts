@@ -30,16 +30,22 @@ export const cpuRanges = [
 
 export type CpuRange = (typeof cpuRanges)[number];
 
-export function cpuSegments(samples: readonly CpuSample[], start: number): CpuSample[][] {
+export function cpuSegments(
+  samples: readonly CpuSample[],
+  start: number,
+  end: number,
+  inferGaps: boolean,
+): CpuSample[][] {
   const segments: CpuSample[][] = [];
   let segment: CpuSample[] | undefined;
   for (const sample of samples) {
     if (sample.time < start) continue;
-    // 重启、休眠和采样中断都会断开曲线。
+    if (sample.time > end) break;
+    // 历史长区间经后端抽样，以返回的断点为准。
     if (
       !segment ||
       sample.starts_segment ||
-      sample.time - segment[segment.length - 1].time > 6_000
+      (inferGaps && sample.time - segment[segment.length - 1].time > 6_000)
     ) {
       segment = [];
       segments.push(segment);

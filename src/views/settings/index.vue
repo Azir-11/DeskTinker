@@ -151,7 +151,7 @@ onMounted(async () => {
           <label class="text-14px font-500" for="cpu-history-retention">CPU 历史保留期</label>
           <span id="cpu-history-retention-help" class="text-[12.5px] text-fg-3">
             可设置 {{ minRetentionDays }}–{{ maxRetentionDays }} 天，过期记录自动删除。
-            趋势图最多显示最近 6 小时。
+            在系统监控页可按日期查看保留期内的记录。
           </span>
         </div>
         <div class="flex items-center gap-8px">

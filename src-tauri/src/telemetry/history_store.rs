@@ -1,17 +1,18 @@
 use std::{
-    collections::VecDeque,
+    collections::{BTreeMap, VecDeque},
     path::Path,
     time::{Duration, Instant},
 };
 
-use rusqlite::{params, Connection, Result};
+use rusqlite::{params, Connection, Result, Row};
 
-use super::history::{CpuHistoryPoint, CHART_DURATION, MAX_POINTS};
+use super::history::{CpuHistoryPoint, CHART_DURATION, MAX_POINTS, MAX_SAMPLE_GAP};
 
 const DEFAULT_RETENTION_DAYS: u32 = 7;
 const RETENTION_DAYS: std::ops::RangeInclusive<u32> = 1..=30;
 const DAY_MS: u64 = 24 * 60 * 60_000;
 const SAVE_INTERVAL: Duration = Duration::from_secs(15);
+const ARCHIVE_BUCKETS: u64 = 1_200;
 
 pub(super) struct CpuHistoryStore {
     db: Connection,
@@ -70,17 +71,54 @@ impl CpuHistoryStore {
         let mut points: Vec<_> = query
             .query_map(
                 params![start as i64, now as i64, MAX_POINTS as i64],
-                |row| {
-                    Ok(CpuHistoryPoint {
-                        time: row.get::<_, i64>(0)? as u64,
-                        usage: row.get(1)?,
-                        starts_segment: row.get(2)?,
-                    })
-                },
+                read_point,
             )?
             .collect::<Result<_>>()?;
         points.reverse();
         Ok(points)
+    }
+
+    pub(super) fn range_points(
+        &self,
+        start: u64,
+        end: u64,
+        now: u64,
+    ) -> Result<Vec<CpuHistoryPoint>> {
+        let start = start.max(retention_cutoff(now, self.retention_days));
+        let end = end.min(now);
+        if start > end {
+            return Ok(Vec::new());
+        }
+
+        // 等待写入的记录可能在校时后乱序；按时间排序，同一时刻以最后一次采样为准。
+        let pending = self
+            .pending
+            .iter()
+            .filter(|point| (start..=end).contains(&point.time))
+            .map(|point| (point.time, *point))
+            .collect::<BTreeMap<_, _>>();
+        let mut pending = pending.into_values().peekable();
+        let mut query = self.db.prepare(
+            "SELECT time, usage, starts_segment FROM cpu_samples
+             WHERE time BETWEEN ?1 AND ?2 ORDER BY time",
+        )?;
+        let rows = query.query_map(params![start as i64, end as i64], read_point)?;
+        let mut selected = ArchivePoints::new(start, end);
+        for row in rows {
+            let point = row?;
+            while let Some(earlier) = pending.next_if(|entry| entry.time < point.time) {
+                selected.push(earlier);
+            }
+            selected.push(
+                pending
+                    .next_if(|entry| entry.time == point.time)
+                    .unwrap_or(point),
+            );
+        }
+        for point in pending {
+            selected.push(point);
+        }
+        Ok(selected.finish())
     }
 
     pub(super) fn queue(&mut self, point: CpuHistoryPoint) {
@@ -141,6 +179,101 @@ impl CpuHistoryStore {
     }
 }
 
+fn read_point(row: &Row<'_>) -> Result<CpuHistoryPoint> {
+    Ok(CpuHistoryPoint {
+        time: row.get::<_, i64>(0)? as u64,
+        usage: row.get(1)?,
+        starts_segment: row.get(2)?,
+    })
+}
+
+// 按时间分桶减少长区间的传输量。遇到断点立即结束桶，避免跨空白连线。
+struct ArchivePoints {
+    start: u64,
+    bucket_ms: u64,
+    points: Vec<CpuHistoryPoint>,
+    bucket: Option<ArchiveBucket>,
+}
+
+impl ArchivePoints {
+    fn new(start: u64, end: u64) -> Self {
+        Self {
+            start,
+            bucket_ms: (end - start).div_ceil(ARCHIVE_BUCKETS).max(1),
+            points: Vec::new(),
+            bucket: None,
+        }
+    }
+
+    fn push(&mut self, mut point: CpuHistoryPoint) {
+        let number = (point.time - self.start) / self.bucket_ms;
+        point.starts_segment |= self
+            .bucket
+            .as_ref()
+            .is_none_or(|bucket| point.time - bucket.last.time > MAX_SAMPLE_GAP.as_millis() as u64);
+        if point.starts_segment
+            || self
+                .bucket
+                .as_ref()
+                .is_some_and(|bucket| bucket.number != number)
+        {
+            self.end_bucket();
+        }
+        if let Some(bucket) = &mut self.bucket {
+            bucket.push(point);
+        } else {
+            self.bucket = Some(ArchiveBucket {
+                number,
+                first: point,
+                low: point,
+                high: point,
+                last: point,
+            });
+        }
+    }
+
+    fn end_bucket(&mut self) {
+        if let Some(bucket) = self.bucket.take() {
+            let mut points = [bucket.first, bucket.low, bucket.high, bucket.last];
+            points.sort_unstable_by_key(|point| point.time);
+            for point in points {
+                if self
+                    .points
+                    .last()
+                    .is_none_or(|last| last.time != point.time)
+                {
+                    self.points.push(point);
+                }
+            }
+        }
+    }
+
+    fn finish(mut self) -> Vec<CpuHistoryPoint> {
+        self.end_bucket();
+        self.points
+    }
+}
+
+struct ArchiveBucket {
+    number: u64,
+    first: CpuHistoryPoint,
+    low: CpuHistoryPoint,
+    high: CpuHistoryPoint,
+    last: CpuHistoryPoint,
+}
+
+impl ArchiveBucket {
+    fn push(&mut self, point: CpuHistoryPoint) {
+        if point.usage < self.low.usage {
+            self.low = point;
+        }
+        if point.usage > self.high.usage {
+            self.high = point;
+        }
+        self.last = point;
+    }
+}
+
 fn retention_cutoff(now: u64, days: u32) -> u64 {
     now.saturating_sub(u64::from(days) * DAY_MS)
 }
@@ -158,6 +291,130 @@ mod tests {
             .unwrap()
             .collect::<Result<_>>()
             .unwrap()
+    }
+
+    fn sample(time: u64, usage: f32) -> CpuHistoryPoint {
+        CpuHistoryPoint {
+            time,
+            usage,
+            starts_segment: false,
+        }
+    }
+
+    #[test]
+    fn searches_reopened_history_with_inclusive_bounds() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("history.sqlite3");
+        let now = 10 * DAY_MS;
+        let start = now - 2 * DAY_MS;
+        let end = start + 4_000;
+        let mut store = CpuHistoryStore::open(&path, now).unwrap();
+        for time in [start - 2_000, start, start + 2_000, end, end + 2_000] {
+            store.queue(sample(time, 32.0));
+        }
+        store.flush(now).unwrap();
+        drop(store);
+
+        let store = CpuHistoryStore::open(&path, now).unwrap();
+        assert!(store.recent_points(now).unwrap().is_empty());
+        let points = store.range_points(start, end, now).unwrap();
+        assert_eq!(
+            points.iter().map(|point| point.time).collect::<Vec<_>>(),
+            [start, start + 2_000, end]
+        );
+        assert!(points[0].starts_segment);
+        assert!(!points[1].starts_segment);
+    }
+
+    #[test]
+    fn includes_pending_samples_and_respects_current_retention_and_time() {
+        let now = 10 * DAY_MS;
+        let cutoff = now - 7 * DAY_MS;
+        let mut store = CpuHistoryStore::open(Path::new(":memory:"), now - 1).unwrap();
+        store.queue(sample(cutoff - 1, 20.0));
+        store.queue(sample(cutoff, 30.0));
+        store.queue(sample(now - 4_000, 40.0));
+        store.flush(now - 1).unwrap();
+        store.queue(sample(now - 2_000, 50.0));
+        store.queue(sample(now, 60.0));
+        store.queue(sample(now - 2_000, 70.0));
+        store.queue(sample(now + 2_000, 80.0));
+
+        let points = store
+            .range_points(cutoff - 2_000, now + 4_000, now)
+            .unwrap();
+        assert_eq!(
+            points
+                .iter()
+                .map(|point| (point.time, point.usage))
+                .collect::<Vec<_>>(),
+            [
+                (cutoff, 30.0),
+                (now - 4_000, 40.0),
+                (now - 2_000, 70.0),
+                (now, 60.0)
+            ]
+        );
+        assert!(store
+            .range_points(cutoff - 1, cutoff - 1, now)
+            .unwrap()
+            .is_empty());
+        assert!(store
+            .range_points(cutoff - 2_000, cutoff - 1, now)
+            .unwrap()
+            .is_empty());
+        assert!(store
+            .range_points(now + 1, now + 4_000, now)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn compresses_a_long_range_without_bridging_gaps_or_hiding_extremes() {
+        let now = 10 * DAY_MS;
+        let start = now - 2 * DAY_MS;
+        let explicit_break = start + 7_200_000;
+        let before_gap = start + 14_400_000;
+        let after_gap = before_gap + 16_000;
+        let peak = start + 82_000;
+        let low = start + 846_000;
+        let end = after_gap + 14_400_000;
+        let mut store = CpuHistoryStore::open(Path::new(":memory:"), now).unwrap();
+        for time in (start..=end).step_by(2_000) {
+            if time > before_gap && time < after_gap {
+                continue;
+            }
+            let usage = if time == peak {
+                100.0
+            } else if time == low {
+                0.0
+            } else {
+                40.0
+            };
+            let mut point = sample(time, usage);
+            point.starts_segment = time == explicit_break;
+            store.queue(point);
+            if time % 600_000 == 0 {
+                store.flush(now).unwrap();
+            }
+        }
+        store.flush(now).unwrap();
+
+        let points = store.range_points(start, now, now).unwrap();
+        assert!(points.len() < 1_000);
+        assert_eq!(points.last().unwrap().time, end);
+        assert_eq!(
+            points
+                .iter()
+                .filter(|point| point.starts_segment)
+                .map(|point| point.time)
+                .collect::<Vec<_>>(),
+            [start, explicit_break, after_gap]
+        );
+        for time in [peak, low, explicit_break - 2_000, before_gap] {
+            assert!(points.iter().any(|point| point.time == time));
+        }
+        assert!(points.windows(2).all(|pair| pair[0].time < pair[1].time));
     }
 
     #[test]
