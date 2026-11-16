@@ -56,11 +56,13 @@ export default defineConfig({
     "i-ph-moon-stars-duotone",
     "i-ph-plugs-duotone",
     "i-ph-plus-bold",
+    "i-ph-pulse-duotone",
     "i-ph-radar-duotone",
     "i-ph-shield-check-duotone",
     "i-ph-sliders-horizontal-duotone",
     "i-ph-sun-duotone",
     "i-ph-terminal-window-duotone",
+    "i-ph-toolbox-duotone",
     "i-ph-trash",
     "i-ph-warning-circle-duotone",
     "i-ph-wrench-duotone",
@@ -127,7 +129,7 @@ export default defineConfig({
     "ghost-btn":
       "w-34px h-34px rounded-[10px] border border-hairline bg-elevated text-fg-2 grid place-items-center cursor-pointer transition-colors hover:text-fg hover:bg-elevated-2 hover:border-hairline-strong",
     "nav-item":
-      "relative flex items-center gap-12px h-40px px-12px rounded-md text-fg-2 text-[13.5px] font-500 cursor-default transition-colors hover:text-fg hover:bg-elevated",
+      "relative flex shrink-0 items-center gap-12px h-[var(--nav-row-h)] px-12px rounded-md text-fg-2 text-[13.5px] font-500 cursor-default transition-colors hover:text-fg hover:bg-elevated",
     "nav-active": "!text-fg bg-accent-soft shadow-[inset_0_0_0_1px_var(--c-hairline)]",
     card: "rounded-lg border border-hairline bg-elevated",
   },
@@ -138,6 +140,27 @@ export default defineConfig({
     ["bg-base", { background: "var(--c-base-grad)" }],
     ["bg-panel", { background: "var(--c-panel-grad)" }],
     ["bg-grad-accent", { background: "var(--grad-accent)" }],
+    [
+      "bg-monitor-cpu",
+      {
+        background: "radial-gradient(ellipse at top right, var(--c-monitor-tint), transparent 70%)",
+      },
+    ],
+    [
+      "bg-monitor-grid",
+      {
+        "background-image":
+          "linear-gradient(to right, var(--c-hairline) 1px, transparent 1px), linear-gradient(to bottom, var(--c-hairline) 1px, transparent 1px)",
+        "background-size": "calc(100% / 12) 100%, 100% 25%",
+      },
+    ],
+    [
+      "mask-monitor-ring",
+      {
+        "-webkit-mask-image": "radial-gradient(circle closest-side, transparent 78%, black 79%)",
+        "mask-image": "radial-gradient(circle closest-side, transparent 78%, black 79%)",
+      },
+    ],
   ],
 
   preflights: [

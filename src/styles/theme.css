@@ -37,6 +37,10 @@
   --panel-w: 250px;
   --panel-top: calc(var(--base-top) + (100vh - var(--base-top) - var(--base-bottom)) * 0.1);
   --panel-h: calc((100vh - var(--base-top) - var(--base-bottom)) * 0.8);
+  --nav-row-h: clamp(31px, calc(40px + (100vh - 800px) * 0.075), 40px);
+  --nav-feature-h: clamp(31px, calc(46px + (100vh - 800px) * 0.125), 46px);
+  --nav-group-gap: clamp(6px, calc(14px + (100vh - 800px) * 0.067), 14px);
+  --monitor-chart-h: clamp(108px, calc(132px + (100vh - 800px) * 0.2), 132px);
   /* Left margin of the content column (clears the overhanging panel). */
   --content-ml: 236px;
   /* Horizontal centre of the content column — used to centre the FAB. */
@@ -64,6 +68,11 @@
   --c-blue: #4aa8ff;
   --c-violet: #9a7cff;
   --c-amber: #ffb14a;
+
+  --c-monitor-cpu: #48dca0;
+  --c-monitor-memory: #6fb7ff;
+  --c-monitor-storage: #ac95ff;
+  --c-monitor-tint: rgba(72, 220, 160, 0.1);
 
   /* macOS traffic lights */
   --tl-close: #ff5f57;
@@ -103,6 +112,11 @@
   --c-text-3: #97a1b0;
 
   --c-accent-soft: rgba(17, 168, 102, 0.14);
+
+  --c-monitor-cpu: #117c54;
+  --c-monitor-memory: #216dbb;
+  --c-monitor-storage: #7354cc;
+  --c-monitor-tint: rgba(17, 124, 84, 0.08);
 
   --c-base-grad: linear-gradient(165deg, #ffffff, #e9edf3);
   --c-panel-grad:

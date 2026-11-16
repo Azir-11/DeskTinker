@@ -1,8 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
-import { onMounted, onUnmounted, ref } from "vue";
 
 /** 实时指标（CPU/内存/交换/负载/频率），由后端 `read_system_stats` 轮询。 */
 export interface SystemStats {
+  sampled_at: number;
   cpu_usage: number;
   per_core: number[];
   cpu_freq: number; // MHz
@@ -40,94 +40,89 @@ export interface DiskInfo {
   used: number;
 }
 
-const LIVE_INTERVAL = 1500; // CPU/内存快轮询
-const SLOW_INTERVAL = 5000; // 温度慢轮询（探测较贵）
+/** 同一种 IPC 在定时刷新、手动刷新和窗口恢复时共用进行中的请求。 */
+function singleFlight(run: () => Promise<void>): () => Promise<void> {
+  let pending: Promise<void> | undefined;
+  return () => {
+    pending ??= run().finally(() => {
+      pending = undefined;
+    });
+    return pending;
+  };
+}
 
-/**
- * 系统遥测组合式函数：快轮询实时指标，慢轮询温度，挂载时取一次静态信息与磁盘。
- * 仅在使用它的页面挂载且窗口可见时轮询；离开/隐藏即停。view 层只渲染。
- */
+/** 仅在使用它的页面挂载且窗口可见时轮询，温度和磁盘分别降频。 */
 export function useSystemStats() {
-  const stats = ref<SystemStats | null>(null);
-  const host = ref<HostInfo | null>(null);
-  const disks = ref<DiskInfo[]>([]);
+  const stats = shallowRef<SystemStats | null>(null);
+  const host = shallowRef<HostInfo | null>(null);
+  const disks = shallowRef<DiskInfo[]>([]);
   const cpuTemp = ref<number | null>(null);
   const error = ref("");
+  const diskStatus = ref<"loading" | "ready" | "error">("loading");
 
-  let liveTimer: number | undefined;
-  let slowTimer: number | undefined;
+  let timers: number[] = [];
 
-  async function pollLive() {
-    if (document.hidden) return;
+  const pollLive = singleFlight(async () => {
     try {
-      stats.value = await invoke<SystemStats>("read_system_stats");
+      const sample = await invoke<SystemStats>("read_system_stats");
+      if (stats.value?.sampled_at !== sample.sampled_at) stats.value = sample;
       error.value = "";
     } catch (e) {
       error.value = String(e);
     }
-  }
+  });
 
-  async function pollTemp() {
-    if (document.hidden) return;
+  const pollTemp = singleFlight(async () => {
     try {
       cpuTemp.value = await invoke<number | null>("read_cpu_temp");
     } catch {
-      /* 温度尽力而为，失败保持上次值 */
+      cpuTemp.value = null;
     }
-  }
+  });
 
-  async function loadHost() {
+  const loadHost = singleFlight(async () => {
+    if (host.value) return;
     try {
       host.value = await invoke<HostInfo>("read_host_info");
     } catch {
       /* 非 Tauri 环境忽略 */
     }
-  }
+  });
 
-  async function loadDisks() {
+  const loadDisks = singleFlight(async () => {
     try {
       disks.value = await invoke<DiskInfo[]>("read_disks");
+      diskStatus.value = "ready";
     } catch {
-      /* 非 Tauri 环境忽略 */
+      diskStatus.value = "error";
     }
-  }
+  });
 
-  /** 手动刷新：实时指标 + 温度 + 磁盘一起拉一次。 */
+  const polls = [
+    { run: pollLive, interval: 2_000 },
+    { run: pollTemp, interval: 6_000 },
+    { run: loadDisks, interval: 30_000 },
+  ];
+
   async function refresh() {
-    await Promise.all([pollLive(), pollTemp(), loadDisks()]);
+    if (document.hidden) return;
+    await Promise.all([loadHost(), ...polls.map(({ run }) => run())]);
   }
 
-  function startTimers() {
-    stopTimers();
-    liveTimer = window.setInterval(pollLive, LIVE_INTERVAL);
-    slowTimer = window.setInterval(pollTemp, SLOW_INTERVAL);
-  }
   function stopTimers() {
-    if (liveTimer !== undefined) {
-      clearInterval(liveTimer);
-      liveTimer = undefined;
-    }
-    if (slowTimer !== undefined) {
-      clearInterval(slowTimer);
-      slowTimer = undefined;
-    }
+    timers.forEach((timer) => window.clearInterval(timer));
+    timers = [];
   }
+
   function onVisibility() {
-    if (document.hidden) {
-      stopTimers();
-    } else {
-      void pollLive();
-      void pollTemp();
-      startTimers();
-    }
+    stopTimers();
+    if (document.hidden) return;
+    void refresh();
+    timers = polls.map(({ run, interval }) => window.setInterval(run, interval));
   }
 
   onMounted(() => {
-    void loadHost();
-    void loadDisks();
-    void pollLive();
-    void pollTemp();
-    startTimers();
+    onVisibility();
     document.addEventListener("visibilitychange", onVisibility);
   });
   onUnmounted(() => {
@@ -135,5 +130,5 @@ export function useSystemStats() {
     document.removeEventListener("visibilitychange", onVisibility);
   });
 
-  return { stats, host, disks, cpuTemp, error, refresh };
+  return { stats, host, disks, cpuTemp, error, diskStatus, refresh };
 }

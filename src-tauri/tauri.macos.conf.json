@@ -1,0 +1,12 @@
+{
+  "build": {
+    "beforeBuildCommand": "bash scripts/prepare-mole.sh && pnpm build"
+  },
+  "bundle": {
+    "macOS": {
+      "files": {
+        "Resources/mole": "generated/mole"
+      }
+    }
+  }
+}

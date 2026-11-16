@@ -1,6 +1,6 @@
 [package]
 name = "hostguard"
-version = "0.1.0"
+version = "0.2.0"
 description = "HostGuard — manage hosts, shell config and system stats"
 authors = ["Azir <alessandradiel743@gmail.com>"]
 edition = "2021"
@@ -35,3 +35,26 @@ sysinfo = { version = "0.33", default-features = false, features = ["system", "d
 certon = { version = "0.2", default-features = false, features = ["ring"] }
 hickory-resolver = "0.26"
 tokio = { version = "1", features = ["rt"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tokio = { version = "1", features = ["io-util", "process", "time"] }
+libc = "0.2"
+portable-pty = "0.9"
+block2 = "0.6"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = [
+  "std",
+  "NSBundle",
+  "NSProcessInfo",
+  "NSURL",
+] }
+objc2-user-notifications = { version = "0.3", default-features = false, features = [
+  "std",
+  "block2",
+  "UNNotification",
+  "UNNotificationContent",
+  "UNNotificationRequest",
+  "UNNotificationTrigger",
+  "UNUserNotificationCenter",
+] }

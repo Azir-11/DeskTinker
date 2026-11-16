@@ -1,3 +1,5 @@
+import { isMacOS } from "@/composables/usePlatform";
+
 export interface MenuItem {
   key: string;
   label: string;
@@ -17,6 +19,22 @@ export const topItem: MenuItem = {
   icon: "i-ph-gauge-duotone",
   path: "/dashboard",
 };
+
+export const monitorItem: MenuItem = {
+  key: "monitor",
+  label: "系统监控",
+  icon: "i-ph-pulse-duotone",
+  path: "/monitor",
+};
+
+const moleItem: MenuItem = {
+  key: "mole",
+  label: "Mole 工具",
+  icon: "i-ph-toolbox-duotone",
+  path: "/mole",
+};
+
+export const primaryItems: MenuItem[] = [monitorItem, ...(isMacOS ? [moleItem] : [])];
 
 /** Labelled navigation groups. */
 export const groups: MenuGroup[] = [
@@ -83,4 +101,9 @@ export const bottomItem: MenuItem = {
 };
 
 /** Flat list of every navigable item (used to resolve the current page). */
-export const allItems: MenuItem[] = [topItem, ...groups.flatMap((g) => g.items), bottomItem];
+export const allItems: MenuItem[] = [
+  topItem,
+  ...primaryItems,
+  ...groups.flatMap((g) => g.items),
+  bottomItem,
+];

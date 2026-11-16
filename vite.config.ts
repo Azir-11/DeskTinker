@@ -15,7 +15,7 @@ export default defineConfig(async () => ({
     vue(),
     UnoCSS(),
     AutoImport({
-      imports: ["vue", "vue-router", "pinia"],
+      imports: ["vue", "vue-router", "pinia", { "naive-ui": ["useDialog"] }],
       dts: "src/types/auto-imports.d.ts",
     }),
     Components({

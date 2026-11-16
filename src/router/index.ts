@@ -1,5 +1,6 @@
 import type { RouteRecordRaw } from "vue-router";
 import { createRouter, createWebHashHistory } from "vue-router";
+import { isMacOS } from "@/composables/usePlatform";
 
 // Hash history avoids 404 on hard reloads inside the Tauri webview.
 const routes: RouteRecordRaw[] = [
@@ -8,6 +9,17 @@ const routes: RouteRecordRaw[] = [
     path: "/dashboard",
     name: "dashboard",
     component: () => import("@/views/dashboard/index.vue"),
+  },
+  {
+    path: "/monitor",
+    name: "monitor",
+    component: () => import("@/views/monitor/index.vue"),
+  },
+  {
+    path: "/mole",
+    name: "mole",
+    beforeEnter: () => isMacOS || { name: "dashboard" },
+    component: () => import("@/views/mole/index.vue"),
   },
   {
     path: "/hosts",

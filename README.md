@@ -9,7 +9,16 @@ CleanMyMac X 风格「Sentinel」深色玻璃拟态界面（异形分层窗口�
 
 - **Hosts 管理**：读取 / 编辑 `/etc/hosts`，启用停用、搜索、一次性授权后直接保存（自动备份）。
 - **Shell 配置**：`~/.zshrc` / `.zprofile` / `.zshenv` / `.zlogin` 多文件语法高亮编辑器，保存前备份。
-- 概览仪表盘、深 / 浅色主题、系统配置与系统用量（开发中）。
+- **系统监控**：在侧边栏查看 CPU 负载趋势、温度、可用内存及各卷的存储用量。
+- **macOS 菜单栏**：运行 HostGuard 时显示 CPU 占用、可用内存及 CPU 温度。关闭窗口后继续采样，从菜单栏可重新打开监控或退出。
+- **Mole 工具（macOS 12+）**：随应用附带。扩展监控、按目录分析存储、已安装应用和操作历史。在应用内终端预览或执行清理、卸载、维护、开发产物清理、安装包清理和通用应用瘦身。
+- 概览仪表盘、深 / 浅色主题和系统配置入口。
+
+CPU 与内存约每 2 秒采样，macOS 温度约每 6 秒读取一次。如果原生读取不到 CPU 温度，HostGuard 会尝试调用内置 [Mole](https://github.com/tw93/Mole) 的只读状态命令 `mo status --json`，每 30 秒最多查询一次。
+
+macOS 每 5 秒检查一次应用 CPU 用量。同一应用（含其辅助进程）持续 30 秒达到单个逻辑核心的 80% 时，菜单栏显示红点并发送系统通知。同一次高占用只提醒一次。通知需在 macOS 中允许，当前告警也可直接在菜单栏菜单查看。
+
+macOS 安装包自带 Mole CLI。安装 HostGuard 后，从侧边栏打开「Mole 工具」即可使用。扩展监控和磁盘分析按需运行，维护页将 `--dry-run` 预览与实际执行分开，并保留 Mole 的交互提示。
 
 详细路线图见 [`TASKS.md`](./TASKS.md)。
 
@@ -33,6 +42,8 @@ pnpm tauri build    # 或 pnpm app:build
 - 应用：`src-tauri/target/release/bundle/macos/HostGuard.app`
 - 安装包：`src-tauri/target/release/bundle/dmg/HostGuard_<版本>_<架构>.dmg`
   （Apple Silicon 为 `aarch64`，Intel 为 `x64`）
+
+macOS 构建需要 Go 1.26.10 生成 Mole 的依赖源码包。构建会校验并打包固定版本的 Mole，随包资源位于 `HostGuard.app/Contents/Resources/mole/`，包含 Mole CLI、GPL-3.0 许可和对应源码。安装后的 HostGuard 可直接运行这些工具。
 
 ## 安装
 
