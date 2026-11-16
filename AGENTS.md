@@ -47,7 +47,7 @@ All write paths back up the previous file to `~/.hostguard.<name>.bak` before ov
 
 ### System telemetry
 
-A single `sysinfo::System` lives in Tauri managed state (`Mutex<System>`) so CPU deltas survive across polls (sysinfo needs two samples). `read_system_stats` refreshes only CPU + memory. The frontend polls only while the monitor page is mounted. Note: Windows reports no load average (returns 0).
+The backend samples CPU and memory about every two seconds while the app runs. CPU history is saved in the app data directory with a configurable retention period (default seven days); the latest six hours are loaded into memory for the chart. `read_system_stats` reads the latest snapshot and `read_cpu_history` accepts an optional timestamp cursor. A separate process sampler retains CPU counters between calls to `read_process_stats`, which the frontend polls only while System Monitor is visible. Process CPU is normalized to total logical CPU capacity; process memory is resident bytes. Windows reports no load average (returns 0).
 
 ### Frontend conventions
 

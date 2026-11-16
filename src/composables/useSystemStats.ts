@@ -17,6 +17,21 @@ export interface SystemStats {
   uptime: number;
 }
 
+export interface ProcessStats {
+  readonly pid: number;
+  readonly name: string;
+  readonly cpu_usage: number | null;
+  readonly memory: number;
+}
+
+export interface CpuSample {
+  readonly time: number;
+  readonly usage: number;
+  readonly starts_segment: boolean;
+}
+
+export const CPU_HISTORY_LIMIT_MS = 6 * 60 * 60_000;
+
 /** 静态/缓变主机信息，只取一次。 */
 export interface HostInfo {
   os: string;
@@ -52,8 +67,12 @@ function singleFlight(run: () => Promise<void>): () => Promise<void> {
 }
 
 /** 仅在使用它的页面挂载且窗口可见时轮询，温度和磁盘分别降频。 */
-export function useSystemStats() {
+export function useSystemStats({ includeMonitorDetails = false } = {}) {
   const stats = shallowRef<SystemStats | null>(null);
+  const processes = shallowRef<readonly ProcessStats[] | null>(null);
+  const processError = ref(false);
+  const cpuHistory = shallowRef<readonly CpuSample[]>([]);
+  const historyError = ref(false);
   const host = shallowRef<HostInfo | null>(null);
   const disks = shallowRef<DiskInfo[]>([]);
   const cpuTemp = ref<number | null>(null);
@@ -69,6 +88,32 @@ export function useSystemStats() {
       error.value = "";
     } catch (e) {
       error.value = String(e);
+    }
+  });
+
+  const pollProcesses = singleFlight(async () => {
+    try {
+      processes.value = await invoke<readonly ProcessStats[]>("read_process_stats");
+      processError.value = false;
+    } catch {
+      processError.value = true;
+    }
+  });
+
+  const pollHistory = singleFlight(async () => {
+    try {
+      const previous = cpuHistory.value;
+      const since = previous[previous.length - 1]?.time;
+      const updates = await invoke<readonly CpuSample[]>("read_cpu_history", { since });
+      if (updates.length) {
+        const cutoff = updates[updates.length - 1].time - CPU_HISTORY_LIMIT_MS;
+        // 时钟回拨后，后端会返回新一段完整历史，替换旧时钟下的缓存。
+        const retained = since !== undefined && updates[0].time > since ? previous : [];
+        cpuHistory.value = [...retained.filter((sample) => sample.time >= cutoff), ...updates];
+      }
+      historyError.value = false;
+    } catch {
+      historyError.value = true;
     }
   });
 
@@ -100,6 +145,12 @@ export function useSystemStats() {
 
   const polls = [
     { run: pollLive, interval: 2_000 },
+    ...(includeMonitorDetails
+      ? [
+          { run: pollProcesses, interval: 2_000 },
+          { run: pollHistory, interval: 2_000 },
+        ]
+      : []),
     { run: pollTemp, interval: 6_000 },
     { run: loadDisks, interval: 30_000 },
   ];
@@ -130,5 +181,17 @@ export function useSystemStats() {
     document.removeEventListener("visibilitychange", onVisibility);
   });
 
-  return { stats, host, disks, cpuTemp, error, diskStatus, refresh };
+  return {
+    stats,
+    processes,
+    processError,
+    cpuHistory,
+    historyError,
+    host,
+    disks,
+    cpuTemp,
+    error,
+    diskStatus,
+    refresh,
+  };
 }

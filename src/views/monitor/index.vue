@@ -3,11 +3,23 @@ import { isWindows } from "@/composables/usePlatform";
 import { useSystemStats } from "@/composables/useSystemStats";
 import CapacityCard from "./CapacityCard.vue";
 import CpuTrend from "./CpuTrend.vue";
-import { clampPercent, CPU_HISTORY_MS, formatCapacity, usedPercent } from "./shared";
-import type { CpuSample } from "./shared";
+import ProcessTable from "./ProcessTable.vue";
+import { clampPercent, formatCapacity, usedPercent } from "./shared";
 
-const { stats, host, disks, cpuTemp, error, diskStatus, refresh } = useSystemStats();
-const history = shallowRef<readonly CpuSample[]>([]);
+const {
+  stats,
+  processes,
+  processError,
+  cpuHistory,
+  historyError,
+  host,
+  disks,
+  cpuTemp,
+  error,
+  diskStatus,
+  refresh,
+} = useSystemStats({ includeMonitorDetails: true });
+const processSection = useTemplateRef<HTMLElement>("processSection");
 const refreshing = ref(false);
 
 const cpuUsage = computed(() =>
@@ -73,17 +85,10 @@ async function refreshMonitor() {
   }
 }
 
-watch(stats, (sample) => {
-  if (!sample?.sampled_at) return;
-  const time = sample.sampled_at;
-  const latest = history.value[history.value.length - 1];
-  // 窗口恢复或系统时间跳变时重开曲线，避免在缺失的时间段上补画趋势。
-  const recent =
-    latest && time > latest.time && time - latest.time <= 6_000
-      ? history.value.filter((point) => time - point.time <= CPU_HISTORY_MS)
-      : [];
-  history.value = [...recent, { time, usage: sample.cpu_usage }];
-});
+function showProcesses() {
+  processSection.value?.focus({ preventScroll: true });
+  processSection.value?.scrollIntoView({ block: "start" });
+}
 </script>
 
 <template>
@@ -103,21 +108,31 @@ watch(stats, (sample) => {
         />
         {{ statusLabel }}
       </div>
-      <button
-        class="ghost-btn shrink-0 disabled:cursor-default disabled:opacity-50"
-        type="button"
-        title="刷新系统指标"
-        aria-label="刷新系统指标"
-        :aria-busy="refreshing"
-        :disabled="refreshing"
-        @click="refreshMonitor"
-      >
-        <span
-          class="i-ph-arrow-clockwise-bold text-14px"
-          :class="{ 'animate-spin': refreshing }"
-          aria-hidden="true"
-        />
-      </button>
+      <div class="flex shrink-0 items-center gap-8px">
+        <button
+          class="ghost-btn w-auto gap-6px inline-flex items-center px-11px text-12px"
+          type="button"
+          @click="showProcesses"
+        >
+          <span class="i-ph-list-bullets-bold text-14px" aria-hidden="true" />
+          查看进程
+        </button>
+        <button
+          class="ghost-btn shrink-0 disabled:cursor-default disabled:opacity-50"
+          type="button"
+          title="刷新系统指标"
+          aria-label="刷新系统指标"
+          :aria-busy="refreshing"
+          :disabled="refreshing"
+          @click="refreshMonitor"
+        >
+          <span
+            class="i-ph-arrow-clockwise-bold text-14px"
+            :class="{ 'animate-spin': refreshing }"
+            aria-hidden="true"
+          />
+        </button>
+      </div>
     </div>
 
     <section class="card relative overflow-hidden" aria-labelledby="monitor-cpu-title">
@@ -147,7 +162,7 @@ watch(stats, (sample) => {
             }}<span v-if="cpuUsage !== null" class="ml-2px text-15px text-fg-2">%</span>
           </strong>
         </header>
-        <CpuTrend :samples="history" />
+        <CpuTrend :samples="cpuHistory" :error="historyError" />
       </div>
 
       <dl
@@ -206,6 +221,15 @@ watch(stats, (sample) => {
         :empty-text="diskMessage"
       />
     </div>
+
+    <section
+      ref="processSection"
+      class="card scroll-mt-12px"
+      aria-labelledby="monitor-processes-title"
+      tabindex="-1"
+    >
+      <ProcessTable :processes="processes" :error="processError" />
+    </section>
 
     <section
       v-if="otherVolumes.length"

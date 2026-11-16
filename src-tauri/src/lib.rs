@@ -103,6 +103,10 @@ pub fn run() {
             grant_dns_flush_access,
             flush_dns_cache,
             telemetry::read_system_stats,
+            telemetry::read_cpu_history,
+            telemetry::read_cpu_history_retention,
+            telemetry::set_cpu_history_retention,
+            telemetry::read_process_stats,
             telemetry::read_host_info,
             telemetry::read_disks,
             telemetry::read_cpu_temp,
@@ -130,32 +134,35 @@ pub fn run() {
             mole::terminal::mole_terminal_resize,
             #[cfg(target_os = "macos")]
             mole::terminal::mole_terminal_stop,
-        ]);
-
-    #[cfg(target_os = "macos")]
-    let builder = builder
-        .manage(mole::read::MoleScan::default())
-        .manage(mole::terminal::MoleTerminal::default())
+        ])
         .setup(|app| {
+            #[cfg(target_os = "macos")]
             if let Err(error) = menu_bar::setup(app) {
                 eprintln!("无法初始化 macOS 菜单栏：{error}");
             }
             telemetry::start_background_sampling(app.handle());
             Ok(())
-        })
+        });
+
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .manage(mole::read::MoleScan::default())
+        .manage(mole::terminal::MoleTerminal::default())
         .on_window_event(menu_bar::on_window_event);
 
     builder
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app, _event| {
-            #[cfg(target_os = "macos")]
-            {
-                use tauri::Manager;
-                if matches!(_event, tauri::RunEvent::Exit) {
-                    _app.state::<mole::terminal::MoleTerminal>().stop_on_exit();
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                telemetry::flush_cpu_history_on_exit(app);
+                #[cfg(target_os = "macos")]
+                {
+                    use tauri::Manager;
+                    app.state::<mole::terminal::MoleTerminal>().stop_on_exit();
                 }
-                menu_bar::on_app_event(_app, &_event);
             }
+            #[cfg(target_os = "macos")]
+            menu_bar::on_app_event(app, &event);
         });
 }

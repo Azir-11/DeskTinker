@@ -26,6 +26,7 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+rusqlite = { version = "0.42", features = ["bundled"] }
 # System telemetry. `default-features = false` 精选所需采集器：system（CPU/内存/负载，
 # 并按 PID 查询端口占用进程详情）、disk（磁盘占用）、component（温度，尽力而为，
 # Windows 走 WMI 可能为空）。无 network。
@@ -34,11 +35,14 @@ sysinfo = { version = "0.33", default-features = false, features = ["system", "d
 # aws-lc 的 CMake 构建依赖；hickory-resolver 用于手动 DNS-01 的多解析器测试。
 certon = { version = "0.2", default-features = false, features = ["ring"] }
 hickory-resolver = "0.26"
-tokio = { version = "1", features = ["rt"] }
+tokio = { version = "1", features = ["rt", "time"] }
+
+[dev-dependencies]
+tempfile = "3"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
-tokio = { version = "1", features = ["io-util", "process", "time"] }
+tokio = { version = "1", features = ["io-util", "process"] }
 libc = "0.2"
 portable-pty = "0.9"
 block2 = "0.6"

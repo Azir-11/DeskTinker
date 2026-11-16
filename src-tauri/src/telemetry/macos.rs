@@ -10,14 +10,12 @@ use super::{
     valid_temperature, Telemetry,
 };
 
-const LIVE_INTERVAL: Duration = Duration::from_secs(2);
 const TEMP_INTERVAL: Duration = Duration::from_secs(6);
 const PROCESS_INTERVAL: Duration = Duration::from_secs(5);
 const MOLE_INTERVAL: Duration = Duration::from_secs(30);
 const MOLE_TIMEOUT: Duration = Duration::from_secs(4);
 
 pub(crate) fn start_background_sampling(app: &AppHandle) {
-    tauri::async_runtime::spawn(sample_live(app.clone()));
     tauri::async_runtime::spawn(sample_temperature(app.clone()));
     tauri::async_runtime::spawn(sample_processes(app.clone()));
 }
@@ -50,26 +48,6 @@ async fn sample_processes(app: AppHandle) {
 
 fn cpu_alert_message(alert: CpuAlert) -> String {
     format!("{} 异常占用 CPU {:.0}%", alert.name, alert.cpu_usage)
-}
-
-async fn sample_live(app: AppHandle) {
-    // 先等 CPU 累积足够的计数增量，再给菜单栏显示第一次用量。
-    time::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL + Duration::from_millis(10)).await;
-    let mut timer = time::interval(LIVE_INTERVAL);
-    timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
-    let state = app.state::<Telemetry>();
-    loop {
-        timer.tick().await;
-        let (cpu_usage, mem_available) = {
-            let Ok(mut sampler) = state.sampler.lock() else {
-                return;
-            };
-            let stats = sampler.sample();
-            (stats.cpu_usage, stats.mem_available)
-        };
-        let temperature = state.temperature.lock().ok().and_then(|temp| *temp);
-        crate::menu_bar::update(&app, Some(cpu_usage), mem_available, temperature);
-    }
 }
 
 async fn sample_temperature(app: AppHandle) {

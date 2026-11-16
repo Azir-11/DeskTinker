@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { getVersion } from "@tauri-apps/api/app";
+import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useMessage } from "naive-ui";
 import { onMounted, ref } from "vue";
@@ -8,18 +9,62 @@ import { useAppStore } from "@/store/app";
 
 const appStore = useAppStore();
 const message = useMessage();
-
-const version = ref("");
-onMounted(async () => {
-  try {
-    version.value = await getVersion();
-  } catch {
-    /* web dev 环境下无 Tauri，忽略 */
-  }
-});
-
 const { status, newVersion, releaseNotes, progress, errorMsg, checkForUpdate, downloadAndInstall } =
   useUpdater();
+
+const minRetentionDays = 1;
+const maxRetentionDays = 30;
+const version = ref("");
+const savedRetentionDays = ref<number | null>(null);
+const draftRetentionDays = ref<number | string>("");
+const retentionLoading = ref(false);
+const retentionSaving = ref(false);
+const retentionError = ref("");
+const nextRetentionDays = computed(() => {
+  const days = draftRetentionDays.value;
+  if (
+    typeof days !== "number" ||
+    !Number.isInteger(days) ||
+    days < minRetentionDays ||
+    days > maxRetentionDays ||
+    savedRetentionDays.value === null ||
+    days === savedRetentionDays.value ||
+    retentionSaving.value
+  ) {
+    return null;
+  }
+  return days;
+});
+
+async function loadRetention() {
+  retentionLoading.value = true;
+  retentionError.value = "";
+  try {
+    const days = await invoke<number>("read_cpu_history_retention");
+    savedRetentionDays.value = days;
+    draftRetentionDays.value = days;
+  } catch (error) {
+    retentionError.value = `读取 CPU 历史保留期失败：${error}`;
+  } finally {
+    retentionLoading.value = false;
+  }
+}
+
+async function saveRetention() {
+  const days = nextRetentionDays.value;
+  if (days === null) return;
+  retentionSaving.value = true;
+  retentionError.value = "";
+  try {
+    await invoke("set_cpu_history_retention", { days });
+    savedRetentionDays.value = days;
+    message.success("已保存 CPU 历史保留期");
+  } catch (error) {
+    retentionError.value = `保存 CPU 历史保留期失败：${error}`;
+  } finally {
+    retentionSaving.value = false;
+  }
+}
 
 async function onCheck() {
   await checkForUpdate();
@@ -39,6 +84,15 @@ async function openRepo() {
     /* noop outside Tauri */
   }
 }
+
+onMounted(async () => {
+  void loadRetention();
+  try {
+    version.value = await getVersion();
+  } catch {
+    /* web dev 环境下无 Tauri，忽略 */
+  }
+});
 </script>
 
 <template>
@@ -77,6 +131,65 @@ async function openRepo() {
           </button>
         </div>
       </div>
+    </section>
+
+    <section
+      class="rounded-lg border border-hairline bg-elevated overflow-hidden"
+      aria-labelledby="monitor-settings-heading"
+    >
+      <h3
+        id="monitor-settings-heading"
+        class="px-18px pt-15px pb-9px text-13px font-600 text-fg-2 tracking-[0.3px]"
+      >
+        系统监控
+      </h3>
+      <form
+        class="flex flex-wrap items-center justify-between gap-12px px-18px py-14px border-t border-hairline"
+        @submit.prevent="saveRetention"
+      >
+        <div class="flex flex-col gap-3px min-w-0">
+          <label class="text-14px font-500" for="cpu-history-retention">CPU 历史保留期</label>
+          <span id="cpu-history-retention-help" class="text-[12.5px] text-fg-3">
+            可设置 {{ minRetentionDays }}–{{ maxRetentionDays }} 天，过期记录自动删除。
+            趋势图最多显示最近 6 小时。
+          </span>
+        </div>
+        <div class="flex items-center gap-8px">
+          <input
+            id="cpu-history-retention"
+            v-model="draftRetentionDays"
+            type="number"
+            :min="minRetentionDays"
+            :max="maxRetentionDays"
+            step="1"
+            placeholder="1–30"
+            aria-describedby="cpu-history-retention-help"
+            :disabled="savedRetentionDays === null || retentionSaving"
+            class="w-64px px-8px py-7px rounded-sm border border-hairline bg-[var(--c-bg-0)] text-fg font-mono text-13px disabled:opacity-50"
+          />
+          <span class="text-13px text-fg-2">天</span>
+          <NButton
+            v-if="retentionError && savedRetentionDays === null"
+            size="small"
+            attr-type="button"
+            @click="loadRetention"
+          >
+            重试
+          </NButton>
+          <NButton
+            v-else
+            size="small"
+            attr-type="submit"
+            :loading="retentionLoading || retentionSaving"
+            :disabled="nextRetentionDays === null"
+          >
+            保存
+          </NButton>
+        </div>
+        <p v-if="retentionError" class="m-0 w-full text-12px text-red-400" role="alert">
+          {{ retentionError }}
+        </p>
+      </form>
     </section>
 
     <section class="rounded-lg border border-hairline bg-elevated overflow-hidden">
