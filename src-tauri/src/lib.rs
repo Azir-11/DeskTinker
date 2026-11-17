@@ -147,6 +147,8 @@ pub fn run() {
 
     #[cfg(target_os = "macos")]
     let builder = builder
+        .menu(menu_bar::app_menu)
+        .on_menu_event(menu_bar::on_menu_event)
         .manage(mole::read::MoleScan::default())
         .manage(mole::terminal::MoleTerminal::default())
         .on_window_event(menu_bar::on_window_event);
